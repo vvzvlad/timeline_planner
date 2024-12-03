@@ -11,7 +11,7 @@
 
   const MINUTE = 60 * 1000;
 
-  eventsStore.subscribe(value => {
+  eventsStore.subscribe((value) => {
     events = sortEventsByTime(value);
     if (isInitialized && items) {
       updateTimelineItems();
@@ -19,7 +19,17 @@
   });
 
   function formatDuration(ms) {
-    return Math.round(ms / 1000 / 60) + " min";
+    const minutes = Math.round(ms / 1000 / 60);
+    const hours = Math.floor(minutes / 60);
+    const remainingMinutes = minutes % 60;
+
+    if (hours === 0) {
+      return `${minutes} min`;
+    } else if (remainingMinutes === 0) {
+      return `${hours} h`;
+    } else {
+      return `${hours} h ${remainingMinutes} min`;
+    }
   }
 
   function roundToMinute(date) {
@@ -30,22 +40,25 @@
 
   function checkOverlap(events, movedEventIndex, newStartTime, newDuration) {
     const movedEvent = events[movedEventIndex];
-    const newEndTime = new Date(newStartTime.getTime() + (newDuration || movedEvent.duration));
-
-    // Получаем все события, кроме разделителей и перемещаемого события
-    const otherEvents = events.filter((e, i) => 
-      e.name !== SEPARATOR_NAME && 
-      i !== movedEventIndex && 
-      !isEventInChain(events, movedEventIndex, i)
+    const newEndTime = new Date(
+      newStartTime.getTime() + (newDuration || movedEvent.duration)
     );
 
-    // Проверяем пересечение с каждым событием
+    // Get all events except separators and the moved event
+    const otherEvents = events.filter(
+      (e, i) =>
+        e.name !== SEPARATOR_NAME &&
+        i !== movedEventIndex &&
+        !isEventInChain(events, movedEventIndex, i)
+    );
+
+    // Check for overlap with each event
     for (const event of otherEvents) {
       const eventEnd = new Date(event.start.getTime() + event.duration);
       if (
-        (newStartTime >= event.start && newStartTime < eventEnd) || // Начало накладывается
-        (newEndTime > event.start && newEndTime <= eventEnd) || // Конец накладывается
-        (newStartTime <= event.start && newEndTime >= eventEnd) // Полное перекрытие
+        (newStartTime >= event.start && newStartTime < eventEnd) || // Start overlaps
+        (newEndTime > event.start && newEndTime <= eventEnd) || // End overlaps
+        (newStartTime <= event.start && newEndTime >= eventEnd) // Full overlap
       ) {
         return true;
       }
@@ -55,10 +68,10 @@
   }
 
   function isEventInChain(events, sourceIndex, targetIndex) {
-    // Проверяем, связаны ли события через разделители
+    // Check if events are linked through separators
     let currentIndex = sourceIndex;
-    
-    // Проверяем вперед
+
+    // Check forward
     while (currentIndex < events.length - 2) {
       if (events[currentIndex + 1].name === SEPARATOR_NAME) {
         currentIndex += 2;
@@ -68,7 +81,7 @@
       }
     }
 
-    // Проверяем назад
+    // Check backward
     currentIndex = sourceIndex;
     while (currentIndex > 1) {
       if (events[currentIndex - 1].name === SEPARATOR_NAME) {
@@ -83,14 +96,14 @@
   }
 
   function isEventMovable(events, eventIndex) {
-    // Проверяем само событие
+    // Check the event itself
     if (events[eventIndex].locked) return false;
 
-    // Проверяем связанные события вперед
+    // Check linked events forward
     let currentIndex = eventIndex;
     while (currentIndex < events.length - 2) {
       if (events[currentIndex + 1].name === SEPARATOR_NAME) {
-        // Есть разделитель, проверяем следующее событие
+        // There is a separator, check the next event
         if (events[currentIndex + 2].locked) return false;
         currentIndex += 2;
       } else {
@@ -98,11 +111,11 @@
       }
     }
 
-    // Проверяем связанные события назад
+    // Check linked events backward
     currentIndex = eventIndex;
     while (currentIndex > 1) {
       if (events[currentIndex - 1].name === SEPARATOR_NAME) {
-        // Есть разделитель, проверяем предыдущее событие
+        // There is a separator, check the previous event
         if (events[currentIndex - 2].locked) return false;
         currentIndex -= 2;
       } else {
@@ -117,10 +130,10 @@
     // Find all chains (including single events)
     const chains = [];
     let currentChain = [];
-    
+
     for (let i = 0; i < events.length; i++) {
       currentChain.push(events[i]);
-      
+
       // If this is a single event or end of chain
       if (i === events.length - 1 || events[i + 1].name !== SEPARATOR_NAME) {
         if (currentChain.length > 0) {
@@ -129,25 +142,25 @@
         }
       }
     }
-    
+
     // Sort chains by their first event's start time
     chains.sort((a, b) => {
       const aStart = a[0].start.getTime();
       const bStart = b[0].start.getTime();
       return aStart - bStart;
     });
-    
+
     // Flatten chains back into a single array
     return chains.flat();
   }
 
   function updateTimelineItems() {
     if (!events || !items) return;
-    
+
     const updates = events
-      .filter(event => event.name !== SEPARATOR_NAME)
-      .map(event => {
-        const eventIndex = events.findIndex(e => e.id === event.id);
+      .filter((event) => event.name !== SEPARATOR_NAME)
+      .map((event) => {
+        const eventIndex = events.findIndex((e) => e.id === event.id);
         const movable = isEventMovable(events, eventIndex);
         return {
           id: event.id,
@@ -159,8 +172,8 @@
           group: 1,
           editable: {
             updateTime: movable,
-            remove: false
-          }
+            remove: false,
+          },
         };
       });
 
@@ -172,36 +185,42 @@
     }
   }
 
-  function recalculateChain(events, movedEventIndex, newStartTime, newDuration = null) {
-    // Проверяем, можно ли двигать событие
+  function recalculateChain(
+    events,
+    movedEventIndex,
+    newStartTime,
+    newDuration = null
+  ) {
+    // Check if event can be moved
     if (!isEventMovable(events, movedEventIndex)) return events;
 
-    // Проверяем наложение
+    // Check for overlapping
     if (checkOverlap(events, movedEventIndex, newStartTime, newDuration)) {
       return events;
     }
 
     let updatedEvents = [...events];
-    
-    // Обновляем длительность перемещаемого события
+
+    // Update duration of the moved event
     if (newDuration !== null) {
       const roundedDuration = Math.round(newDuration / MINUTE) * MINUTE;
       updatedEvents[movedEventIndex].duration = roundedDuration;
     }
 
-    // Обновляем позицию перемещаемого события
+    // Update position of the moved event
     updatedEvents[movedEventIndex].start = roundToMinute(newStartTime);
 
-    // Проверяем и обновляем связанные события
+    // Check and update linked events
     let currentIndex = movedEventIndex;
-    
-    // Двигаем связанные события вперед
+
+    // Move linked events forward
     while (currentIndex < events.length - 2) {
       if (events[currentIndex + 1].name === SEPARATOR_NAME) {
-        // Есть разделитель, двигаем следующее событие
+        // There is a separator, move the next event
         const nextEventIndex = currentIndex + 2;
         updatedEvents[nextEventIndex].start = new Date(
-          updatedEvents[currentIndex].start.getTime() + updatedEvents[currentIndex].duration
+          updatedEvents[currentIndex].start.getTime() +
+            updatedEvents[currentIndex].duration
         );
         currentIndex = nextEventIndex;
       } else {
@@ -209,15 +228,16 @@
       }
     }
 
-    // Двигаем связанные события назад
+    // Move linked events backward
     currentIndex = movedEventIndex;
     while (currentIndex > 1) {
       if (events[currentIndex - 1].name === SEPARATOR_NAME) {
-        // Есть разделитель, двигаем предыдущее событие
+        // There is a separator, move the previous event
         const prevEventIndex = currentIndex - 2;
         if (prevEventIndex >= 0) {
           updatedEvents[prevEventIndex].start = new Date(
-            updatedEvents[currentIndex].start.getTime() - updatedEvents[prevEventIndex].duration
+            updatedEvents[currentIndex].start.getTime() -
+              updatedEvents[prevEventIndex].duration
           );
           currentIndex = prevEventIndex;
         }
@@ -230,67 +250,82 @@
   }
 
   function initializeTimeline() {
+    // @ts-ignore
     if (!window.vis) {
       setTimeout(initializeTimeline, 100);
       return;
     }
 
+    // @ts-ignore
     items = new window.vis.DataSet();
+    // @ts-ignore
     groups = new window.vis.DataSet([{ id: 1, content: "" }]);
 
     const options = {
       editable: {
         updateTime: true,
         updateGroup: false,
-        overrideItems: true
+        overrideItems: true,
       },
       stack: false,
       margin: { item: { horizontal: 0 } },
       rollingMode: { follow: false },
       snap: (date) => roundToMinute(date),
-      onMoving: function(item, callback) {
-        const movedEventIndex = events.findIndex(event => event.id === item.id);
+      onMoving: function (item, callback) {
+        const movedEventIndex = events.findIndex(
+          (event) => event.id === item.id
+        );
         if (movedEventIndex !== -1) {
-          // Проверяем, можно ли двигать событие
+          // Check if event can be moved
           if (!isEventMovable(events, movedEventIndex)) {
-            callback(null); // Отменяем перемещение
+            callback(null); // Cancel movement
             return;
           }
 
           const newDuration = item.end - item.start;
           const newStart = item.start;
 
-          // Проверяем наложение
+          // Check for overlapping
           if (checkOverlap(events, movedEventIndex, newStart, newDuration)) {
-            callback(null); // Отменяем перемещение
+            callback(null); // Cancel movement
             return;
           }
 
-          const updatedEvents = recalculateChain(events, movedEventIndex, newStart, newDuration);
-          
+          const updatedEvents = recalculateChain(
+            events,
+            movedEventIndex,
+            newStart,
+            newDuration
+          );
+
           item.content = `${updatedEvents[movedEventIndex].name} (${formatDuration(newDuration)})`;
           eventsStore.set(updatedEvents);
         }
         callback(item);
-      }
+      },
     };
 
+    // @ts-ignore
     timeline = new window.vis.Timeline(container, items, groups, options);
     isInitialized = true;
 
-    // Инициализируем элементы после создания таймлайна
+    // Initialize items after timeline creation
     updateTimelineItems();
 
-    // Устанавливаем окно просмотра
+    // Set the view window
     if (events && events.length > 0) {
       // Find min and max times across all events
-      const minTime = Math.min(...events
-        .filter(event => event.name !== SEPARATOR_NAME)
-        .map(event => event.start.getTime()));
-      const maxTime = Math.max(...events
-        .filter(event => event.name !== SEPARATOR_NAME)
-        .map(event => event.start.getTime() + event.duration));
-      
+      const minTime = Math.min(
+        ...events
+          .filter((event) => event.name !== SEPARATOR_NAME)
+          .map((event) => event.start.getTime())
+      );
+      const maxTime = Math.max(
+        ...events
+          .filter((event) => event.name !== SEPARATOR_NAME)
+          .map((event) => event.start.getTime() + event.duration)
+      );
+
       const timeRange = maxTime - minTime;
       const padding = timeRange * 0.1; // 10% padding
 
@@ -316,32 +351,46 @@
 <style>
   .timeline {
     width: 100%;
-    height: 200px;
+    height: 400px;
     border: 1px solid lightgray;
   }
 
   :global(.vis-item.linked-item) {
     background-color: #97c2fc;
     border-color: #2b7ce9;
+    min-height: 100px !important;
+    font-size: 12px;
+    white-space: normal !important;
+    word-wrap: break-word !important;
   }
 
   :global(.vis-item.main-item) {
     background-color: #ffb366;
     border-color: #ff7f00;
+    min-height: 100px !important;
+    font-size: 12px;
+    white-space: normal !important;
+    word-wrap: break-word !important;
   }
 
   :global(.vis-item:hover) {
-    box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.2);
     z-index: 2;
   }
 
   :global(.vis-item.vis-selected) {
     background-color: #d5e8ff;
-    border-color: #2196F3;
+    border-color: #2196f3;
   }
 
   :global(.vis-item.vis-readonly) {
     background-color: #fff3e0;
     cursor: not-allowed;
+  }
+
+  :global(.vis-item .vis-item-content) {
+    padding: 4px 8px;
+    white-space: normal !important;
+    word-wrap: break-word !important;
   }
 </style>

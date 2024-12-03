@@ -10,7 +10,6 @@
 </script>
 
 <main>
-  <h1>Timeline with Linked Events</h1>
   <Timeline />
   <EventsTable {events} />
 </main>
