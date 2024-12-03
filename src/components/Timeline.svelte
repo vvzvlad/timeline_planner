@@ -1,6 +1,7 @@
 <script>
   import { onMount } from "svelte";
   import { eventsStore, SEPARATOR_NAME } from "../stores/events";
+  import { selectedTimezone } from "../stores/timezone";
 
   let container;
   let timeline;
@@ -8,6 +9,7 @@
   let isInitialized = false;
   let items;
   let groups;
+  let currentTimezone;
 
   const MINUTE = 60 * 1000;
 
@@ -15,6 +17,13 @@
     events = sortEventsByTime(value);
     if (isInitialized && items) {
       updateTimelineItems();
+    }
+  });
+
+  selectedTimezone.subscribe((timezone) => {
+    currentTimezone = timezone;
+    if (isInitialized && timeline) {
+      updateTimelineCustomTime();
     }
   });
 
@@ -249,9 +258,55 @@
     return updatedEvents;
   }
 
+  // Список часовых поясов с UTC смещением
+  const timezones = [
+    'UTC+00:00 (Лондон)',
+    'UTC+01:00 (Париж)',
+    'UTC+02:00 (Киев)',
+    'UTC+03:00 (Москва)',
+    'UTC+04:00 (Дубай)',
+    'UTC+05:00 (Челябинск, Ташкент)',
+    'UTC+06:00 (Астана)',
+    'UTC+07:00 (Бангкок)',
+    'UTC+08:00 (Пекин)',
+    'UTC+09:00 (Токио, Токио)',
+    'UTC+10:00 (Владивосток)',
+    'UTC+11:00 (Сахалин)',
+    'UTC+12:00 (Окленд)',
+    'UTC-11:00 (Гавайи)',
+    'UTC-10:00 (Гавайи)',
+    'UTC-09:00 (Аляска)',
+    'UTC-08:00 (Лос-Анджелес)',
+    'UTC-07:00 (Лас-Вегас)',
+    'UTC-06:00 (Чикаго)',
+    'UTC-05:00 (Нью-Йорк)',
+    'UTC-04:00 (Сан-Франциско)',
+    'UTC-03:00 (Сан-Паулу)',
+    'UTC-02:00 (Азорские острова)',
+    'UTC-01:00 (Азорские острова)'
+  ];
+
+  function getUtcOffset(timezone) {
+    const match = timezone.match(/UTC([+-]\d{2}):00/);
+    return match ? parseInt(match[1]) : 0;
+  }
+
+  function updateTimelineCustomTime() {
+    const options = {
+      moment: function(date) {
+        const offset = getUtcOffset($selectedTimezone);
+        // @ts-ignore
+        return window.moment(date).utcOffset(offset);
+      }
+    };
+    
+    timeline.setOptions(options);
+    timeline.redraw();
+  }
+
   function initializeTimeline() {
     // @ts-ignore
-    if (!window.vis) {
+    if (!window.vis || !window.moment) {
       setTimeout(initializeTimeline, 100);
       return;
     }
@@ -303,6 +358,10 @@
         }
         callback(item);
       },
+      moment: function(date) {
+        // @ts-ignore
+        return window.moment(date).tz(currentTimezone);
+      }
     };
 
     // @ts-ignore
@@ -345,6 +404,14 @@
     };
   });
 </script>
+
+<div class="timezone-selector">
+  <select bind:value={$selectedTimezone}>
+    {#each timezones as tz}
+      <option value={tz}>{tz}</option>
+    {/each}
+  </select>
+</div>
 
 <div bind:this={container} class="timeline"></div>
 
@@ -392,5 +459,15 @@
     padding: 4px 8px;
     white-space: normal !important;
     word-wrap: break-word !important;
+  }
+
+  .timezone-selector {
+    margin-bottom: 1rem;
+  }
+
+  .timezone-selector select {
+    padding: 0.5rem;
+    border-radius: 4px;
+    border: 1px solid #ccc;
   }
 </style>
