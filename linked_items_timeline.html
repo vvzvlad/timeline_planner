@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Timeline</title>
+  <meta charset="utf-8">
+  <script type="text/javascript" src="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.js"></script>
+  <link href="https://unpkg.com/vis-timeline@latest/styles/vis-timeline-graph2d.min.css" rel="stylesheet" type="text/css" />
+  
+  <style type="text/css">
+    #visualization {
+      width: 100%;
+      height: 200px;
+      border: 1px solid lightgray;
+    }
+    
+    .vis-item.linked-item {
+      background-color: #97c2fc;
+      border-color: #2b7ce9;
+    }
+    
+    .vis-item.main-item {
+      background-color: #ffb366;
+      border-color: #ff7f00;
+    }
+
+    .vis-item:hover {
+      box-shadow: 0 0 10px rgba(0,0,0,0.2);
+      z-index: 2;
+    }
+
+    .vis-item.vis-selected {
+      background-color: #d5e8ff;
+      border-color: #2196F3;
+    }
+
+    #debug {
+      margin-top: 20px;
+      font-family: monospace;
+      white-space: pre;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Timeline with Linked Events</h1>
+  <div id="visualization"></div>
+  <div id="debug"></div>
+
+  <script>
+    const container = document.getElementById('visualization');
+    const debugElement = document.getElementById('debug');
+    const items = new vis.DataSet();
+    const groups = new vis.DataSet([
+      {id: 1, content: ''}
+    ]);
+    
+    const hour = 60 * 60 * 1000; // milliseconds in hour
+
+    function formatDuration(ms) {
+      return Math.round(ms / 1000 / 60) + ' min';
+    }
+
+    // Internal events representation
+    let eventsChain = [
+      {
+        id: 3,
+        name: 'Linked Event 2',
+        duration: hour,
+        start: null
+      },
+      {
+        id: 2,
+        name: 'Linked Event 1',
+        duration: hour,
+        start: null
+      },
+      {
+        id: 1,
+        name: 'Main Event',
+        duration: hour,
+        start: null
+      }
+    ];
+
+    // Recalculate chain from the moved/resized event
+    function recalculateChain(movedEventIndex, newStartTime, newDuration = null) {
+      // Update duration if provided
+      if (newDuration !== null) {
+        eventsChain[movedEventIndex].duration = newDuration;
+      }
+
+      // Update forward (events after moved event)
+      let currentTime = newStartTime;
+      for (let i = movedEventIndex; i < eventsChain.length; i++) {
+        eventsChain[i].start = currentTime;
+        currentTime = new Date(currentTime.getTime() + eventsChain[i].duration);
+      }
+      
+      // Update backward (events before moved event)
+      currentTime = newStartTime;
+      for (let i = movedEventIndex - 1; i >= 0; i--) {
+        currentTime = new Date(currentTime.getTime() - eventsChain[i].duration);
+        eventsChain[i].start = currentTime;
+      }
+    }
+
+    // Update timeline items from chain
+    function updateTimelineFromChain() {
+      const updates = eventsChain.map(event => ({
+        id: event.id,
+        content: `${event.name} (${formatDuration(event.duration)})`,
+        start: event.start,
+        end: new Date(event.start.getTime() + event.duration),
+        className: event.id === 1 ? 'main-item' : 'linked-item',
+        type: 'range',
+        group: 1
+      }));
+      
+      items.update(updates);
+      
+      // Update debug view
+      debugElement.textContent = 'Events Chain:\n' + JSON.stringify(eventsChain, (key, value) => {
+        if (value instanceof Date) {
+          return value.toLocaleTimeString();
+        }
+        if (typeof value === 'number' && key === 'duration') {
+          return formatDuration(value);
+        }
+        return value;
+      }, 2);
+    }
+
+    // Initial setup
+    recalculateChain(0, new Date());
+    updateTimelineFromChain();
+
+    const options = {
+      start: eventsChain[0].start,
+      end: new Date(eventsChain[eventsChain.length - 1].start.getTime() + hour),
+      editable: {
+        updateTime: true,
+        updateGroup: false
+      },
+      stack: false,
+      margin: {
+        item: {
+          horizontal: 0
+        }
+      },
+      rollingMode: {
+        follow: true,
+        offset: 0.5
+      },
+      onMoving: function(item, callback) {
+        const movedEventIndex = eventsChain.findIndex(event => event.id === item.id);
+        if (movedEventIndex !== -1) {
+          const newDuration = item.end - item.start;
+          recalculateChain(movedEventIndex, item.start, newDuration);
+          
+          // Update the item's content immediately to show new duration
+          item.content = `${eventsChain[movedEventIndex].name} (${formatDuration(newDuration)})`;
+          
+          updateTimelineFromChain();
+        }
+        callback(item);
+      }
+    };
+
+    const timeline = new vis.Timeline(container, items, groups, options);
+  </script>
+</body>
+</html> 
